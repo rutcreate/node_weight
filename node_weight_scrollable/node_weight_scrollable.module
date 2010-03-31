@@ -1,0 +1,173 @@
+<?php
+
+/**
+ * Implementation of hook_weight_info().
+ */
+function node_weight_scrollable_weight_info() {
+  $form['scrollable_navigation'] = array(
+    '#type' => 'select',
+    '#title' => t('Navigation\' position'),
+    '#default_value' => variable_get('scrollable_navigation', 'top'),
+    '#options' => array(
+      'none' => t('Do not display'),
+      'top' => t('Top'),
+      'bottom' => t('Bottom'),
+      'lr' => t('Left and right'),
+    ),
+  );
+  $form['scrollable_auto_scroll'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Auto scroll'),
+    '#default_value' => variable_get('scrollable_auto_scroll', TRUE),
+  );
+  $form['scrollable_loop'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Loop scroll'),
+    '#default_value' => variable_get('scrollable_loop', TRUE),
+  );
+  $form['scrollable_size'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Size scroll'),
+    '#default_value' => variable_get('scrollable_size', 1),
+    '#size' => 5,
+  );
+  $form['scrollable_scroll_interval'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Scroll interval'),
+    '#description' => t('Speed in millisecond.'),
+    '#default_value' => variable_get('scrollable_scroll_interval', 3000),
+    '#size' => 5,
+  );
+  
+  return array(
+    'name' => t('Scrollable'),
+    'description' => t('Display as scrollable'),
+    'form' => $form,
+  );
+}
+
+/**
+ * Implementation of hook_weight_view().
+ */
+function node_weight_scrollable_weight_view($nodes, $type, $settings) {
+  // Settings
+  foreach ($settings as $name => $value) {
+    $$name = $value;
+  }
+  
+  // Generate items
+  $items = array();
+  foreach ($nodes as $i => $node) {
+    foreach ($node->node_weight as $name => $value) {
+      $$name = $value;
+    }
+    
+    $hide = ($i > 0) ? 'none' : 'block';
+    
+    $item = '<div id="tab-'. $node->nid .'" class="node-weight-page" style="display:'. $hide .';">';
+    if ($embed) {
+      $item .= '<div class="node-weight-'. $type .'-image">'. $embed .'</div>';
+    }
+    elseif ($image_path) {
+      // Make image
+      if ($preset_image) {
+        $image = theme('imagecache', $preset_image, $image_path, $node->title, $node->title);
+      }
+      else {
+        $image = theme('image', $image_path, $node->title, $node->title);
+      }
+      // Image as link
+      if ($display_image_as_link) {
+        $options = array('html' => TRUE);
+        if (mb_substr($node->url, 0, 7) == 'http://') {
+          $options['absolute'] = TRUE;
+          $options['attributes'] = array('target' => '_blank');
+        }
+        $image = l($image, $node->url, $options);
+      }
+      $item .= '<div class="node-weight-'. $type .'-image">'. $image .'</div>';
+    }
+    elseif ($swf_path && module_exists('swftools')) {
+      /*$size = explode('x', variable_get('node_weight_swf_size_'.$delta, '210x150'));
+      $swf_height = $size[1];
+      $swf_width = $size[0];
+      $items .= '<div class="node-weight-'.$delta.'-swf">';
+      $items .= swf($swf_path, array('params' => array('height' => $swf_height, 'width' => $swf_width)));
+      $items .= '</div>';*/
+    }
+    
+    // Display title
+    if ($display_title) {
+      $item .= '<div class="node-weight-'. $type .'-title">';
+      $item .= $node->link;
+      $item .= '</div>';
+    }
+    
+    // Display body
+    if (!empty($display_body) && $node->body) {
+      $item .= '<div class="node-weight-'. $type .'-body">';
+      $item .= check_markup($node->body, $node->format, FALSE);
+      $item .= $footer;
+      $item .= '</div>';
+    }
+    
+    $item .= '</div>';
+    
+    $scrollable_settings['node_weight']['scrollable']['items'][] = url($image_path, array('absolute' => TRUE));
+    
+    // Store item
+    $items[] = $item;
+  }
+  
+  // HTML items
+  $items = '<div class="items">'. implode('', $items) .'</div>';
+  
+  // Wrap items
+  $output = '<div class="node-weight-slide-content-scrollable" id="marker-node-weight-navi-'.$type.'">'. $items .'</div>';
+  
+  // Navigation
+  if ($scrollable_navigation == 'top') {
+    $output = '<a class="prev">'. t('Previous') .'</a> <a class="next">'. t('Next') .'</a>'. $output;
+  }
+  elseif ($scrollable_navigation == 'lr') {
+    $output = '<a class="prev">'. t('Previous') .'</a>'. $output . '<a class="next">'. t('Next') .'</a>';
+  }
+  elseif ($scrollable_navigation == 'bottom') {
+    $output = $output . '<a class="prev">'. t('Previous') .'</a> <a class="next">'. t('Next') .'</a>';
+  }
+  
+  // Wrap outest
+  $output = '<div class="node-weight-slide node-weight-slide-scrollable">'. $output .'</div>';
+  
+  // Edit order link
+  if (user_access('administer node weight')) {
+		$output .= '<div class="node-weight-edit-link">'. l(t('Change featured order...'), 'node_weight/'. $type) .'</div>';
+	}
+	
+	// Javascript
+	$scrollable_settings['node_weight']['scrollable'] = array(
+	  'interval' => $scrollable_scroll_interval ? $scrollable_scroll_interval : 3000,
+	  'auto' => isset($scrollable_auto_scroll) ? $scrollable_auto_scroll : TRUE,
+	  'loop' => isset($scrollable_loop) ? $scrollable_loop : TRUE,
+	  'size' => isset($scrollable_size) ? $scrollable_size : 1,
+	  'linked' => isset($display_image_as_link) ? $display_image_as_link : TRUE,
+	);
+  drupal_add_js($scrollable_settings, 'setting');
+  drupal_add_js(drupal_get_path('module', 'node_weight_scrollable') .'/node_weight.scrollable.js');
+  drupal_add_js(drupal_get_path('module', 'node_weight_scrollable') .'/node_weight.scrollable_build.js');
+  drupal_add_css(drupal_get_path('module', 'node_weight_scrollable') .'/node_weight.scrollable_build.css');
+  
+  return $output;
+}
+
+/**
+ * Implementations of hook_theme().
+ */
+function node_weight_scrollable_theme() {
+  return array(
+    'node_weight_scrollable' => array(
+      'template' => 'node-weight-scrollable',
+      'arguments' => array(),
+    ),
+  );
+}

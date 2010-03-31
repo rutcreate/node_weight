@@ -1,0 +1,180 @@
+<?php
+
+/**
+ * Implementation of hook_weight_info().
+ */
+function node_weight_tab_weight_info() {
+  $form['tab_navigation'] = array(
+    '#type' => 'select',
+    '#title' => t('Navigation\' position'),
+    '#default_value' => variable_get('tab_navigation', 'top'),
+    '#options' => array(
+      'none' => t('Do not display'),
+      'top' => t('Top'),
+      'bottom' => t('Bottom'),
+    ),
+  );
+  if (module_exists('imagecache')) {
+    $presets = array(
+      'numeric' => t('Numeric'),
+      'title' => t('Node title')
+    );
+    foreach (imagecache_presets() as $preset) {
+      $presets[$preset['presetname']] = 'Thumbnail: '. $preset['presetname'];
+    }
+    $form['tab_navigation_type'] = array(
+      '#type' => 'select',
+      '#title' => t('Navigation\'s type'),
+      '#default_value' => variable_get('tab_navigation_type', 'none'),
+      '#options' => $presets,
+    );
+  }
+  $form['tab_navigation_opacity'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Inactive opacity'),
+    '#description' => t('Value in range (0-1).'),
+    '#default_value' => variable_get('tab_navigation_opacity', 0.4),
+    '#size' => 5,
+  );
+  
+  return array(
+    'name' => t('Tab'),
+    'description' => t('Tab display'),
+    'form' => $form,
+  );
+}
+
+/**
+ * Implementation of hook_weight_view().
+ */
+function node_weight_tab_weight_view($nodes, $type, $settings) {
+  // Settings
+  foreach ($settings as $name => $value) {
+    $$name = $value;
+  }
+  
+  // Generate items
+  $items = array();
+  $navigation = array();
+  foreach ($nodes as $i => $node) {
+    foreach ($node->node_weight as $name => $value) {
+      $$name = $value;
+    }
+    
+    $hide = ($i > 0) ? 'none' : 'block';
+    
+    $item = '<div id="tab-'. $node->nid .'" class="node-weight-page" style="display:'. $hide .';">';
+    if ($embed) {
+      $item .= '<div class="node-weight-'. $type .'-image">'. $embed .'</div>';
+    }
+    elseif ($image_path) {
+      // Make image
+      if ($preset_image) {
+        $image = theme('imagecache', $preset_image, $image_path, $node->title, $node->title);
+      }
+      else {
+        $image = theme('image', $image_path, $node->title, $node->title);
+      }
+      // Image as link
+      if ($display_image_as_link) {
+        $options = array('html' => TRUE);
+        if (mb_substr($node->url, 0, 7) == 'http://') {
+          $options['absolute'] = TRUE;
+          $options['attributes'] = array('target' => '_blank');
+        }
+        $image = l($image, $node->url, $options);
+      }
+      $item .= '<div class="node-weight-'. $type .'-image">'. $image .'</div>';
+    }
+    elseif ($swf_path && module_exists('swftools')) {
+      
+    }
+    
+    // Display title
+    //   If use title as navigation, do not display title again
+    if ($display_title) {
+      $item .= '<div class="node-weight-'. $type .'-title">';
+      $item .= $node->link;
+      $item .= '</div>';
+    }
+    
+    // Display body
+    if (!empty($display_body) && $node->body) {
+      $item .= '<div class="node-weight-'. $type .'-body">';
+      $item .= check_markup($node->body, $node->format, FALSE);
+      $item .= $footer;
+      $item .= '</div>';
+    }
+    
+    $item .= '</div>';
+    
+    if (in_array($tab_navigation, array('top', 'bottom'))) {
+      if ($tab_navigation_type == 'numeric') {
+        $navigation[] = '<li><a href="#tab-'. $node->nid .'">'. ($i+1) .'</a></li>';
+      }
+      elseif ($tab_navigation_type == 'title') {
+        $navigation[] = '<li><a href="#tab-'. $node->nid .'">'. $node->title .'</a></li>';
+      }
+      else {
+        $thumbnail = theme('imagecache', $tab_navigation_type, $image_path, $node->title, $node->title);
+        $navigation[] = '<li><a href="#tab-'. $node->nid .'">'. $thumbnail .'</a></li>';
+      }
+    }
+    
+    // Store item
+    $items[] = $item;
+  }
+  
+  
+  // HTML items
+  $items = implode('', $items);
+  
+  // Wrap items
+  $output = '<div class="node-weight-slide-content-tab" id="marker-node-weight-navi-'.$type.'">'. $items .'</div>';
+  
+  // Navigation
+  if (count($navigation)) {
+    $navi = '<div class="node-weight-slide-pager">';
+    $navi .= '<ul id="node-weight-navi-'. $type .'" class="node-weight-navi node-weight-navi-tab">';
+    $navi .= implode('', $navigation);
+    $navi .= '</ul>';
+    $navi .= '</div>';
+    if ($tab_navigation == 'top') {
+      $output = $navi . $output;
+    }
+    elseif ($tab_navigation == 'bottom') {
+      $output = $output . $navi;
+    }
+  }
+  
+  // Wrap outest
+  $output = '<div class="node-weight-slide node-weight-slide-tab">'. $output .'</div>';
+  
+  // Edit order link
+  if (user_access('administer node weight')) {
+		$output .= '<div class="node-weight-edit-link">'. l(t('Change featured order...'), 'node_weight/'. $type) .'</div>';
+	}
+	
+	// Javascript
+	$tab_settings['node_weight']['tab'] = array(
+	  'opacity' => $tab_navigation_opacity ? $tab_navigation_opacity : 0.4,
+	);
+	
+  drupal_add_js($tab_settings, 'setting');
+  drupal_add_js(drupal_get_path('module', 'node_weight_tab') .'/node_weight.tab.js');
+  drupal_add_js(drupal_get_path('module', 'node_weight_tab') .'/node_weight.tab_build.js');
+  
+  return $output;
+}
+
+/**
+ * Implementations of hook_theme().
+ */
+function node_weight_tab_theme() {
+  return array(
+    'node_weight_tab' => array(
+      'template' => 'node-weight-tab',
+      'arguments' => array(),
+    ),
+  );
+}

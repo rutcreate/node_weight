@@ -1,0 +1,394 @@
+<?php
+// $Id$
+
+/**
+ * @file
+ * Node weight module's administrative pages.
+ *
+ * Contains form building functions, submit handlers, and theme functions for
+ * the module's overview form, add and edit forms, and the delete confirmation
+ * form.
+ */
+function node_weight_perm() {
+  return array('administer node weight');
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function node_weight_menu() {
+	$items['admin/content/node_weight'] = array(
+		'title' => t('Node weight'),
+		'description' => t('Select content type for weight manager.'),
+		'page callback' => 'node_weight_type_form',
+		'access arguments' => array('administer node weight'),
+		'type' => MENU_NORMAL_ITEM,
+		'file' => 'node_weight.admin.inc',
+	);
+	$items['admin/content/node_weight/%'] = array(
+		'page callback' => 'drupal_get_form',
+	  'page arguments' => array('node_weight_overview_form', 3),
+		'access arguments' => array('administer node weight'),
+		'type' => MENU_NORMAL_ITEM,
+		'file' => 'node_weight.admin.inc',
+	);
+	$items['admin/settings/node_weight'] = array(
+		'title' => t('Node Weight'),
+		'description' => t('Configure Node Weight options.'),
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('node_weight_admin_settings_form'),
+		'access arguments' => array('administer node weight'),
+		'type' => MENU_NORMAL_ITEM,
+		'file' => 'node_weight.admin.inc',
+	);
+	return $items;
+}
+
+/** 
+ * Implementation of hook_theme(). 
+ */
+function node_weight_theme() {
+  return array('node_weight_overview_form' => array('arguments' => array('form' => array())));
+}
+
+/** 
+ * Implementation of hook_nodeapi(). 
+ */
+function node_weight_nodeapi(&$node, $op){
+	$allow_type = variable_get('node_weight_allow_type', NULL);
+	if ($allow_type) {
+		foreach ($allow_type as $type => $value) {
+			if ($value) {
+				$allow_types[] = $type;
+			}
+		}
+		
+		if (isset($allow_types) && in_array($node->type, $allow_types)) {
+			switch ($op) {
+				case 'insert':
+				  $node->url = empty($node->url) ? 'node/'. $node->nid : $node->url;
+				  db_query("INSERT INTO {node_weight} (nid, weight, url) VALUES (%d, %d, '%s')", $node->nid, 0, $node->url);
+					break;
+				case 'update':
+				  $node->url = empty($node->url) ? 'node/'. $node->nid : $node->url;
+				  db_query("UPDATE {node_weight} SET url = '%s' WHERE nid = %d", $node->url, $node->nid);
+					break;
+				case 'delete':
+					db_query("DELETE FROM {node_weight} WHERE nid = %d", $node->nid);
+					break;
+				case 'load':
+					$data = db_fetch_object(db_query("SELECT * FROM {node_weight} WHERE nid = %d", $node->nid));
+					$node->url = $data->url;
+					$node->weight = $data->weight;
+					break;
+			}
+		}
+	}
+}
+
+/** 
+ * Implementation of hook_form_alter(). 
+ */
+function node_weight_form_alter(&$form, $form_state, $form_id) {
+	$allow_type = variable_get('node_weight_allow_type', NULL);
+	if ($allow_type) {
+		foreach ($allow_type as $type => $value) {
+			if ($value) {
+				$allow_form[] = $type.'_node_form';
+			}
+		}
+		if (isset($allow_form) && in_array($form_id, $allow_form)) {
+			$node = node_load(arg(1));
+			$form['url'] = array(
+				'#type' => 'textfield', 
+				'#title' => t('URL'),
+				'#default_value' => $node->url,
+			);
+		}
+	}
+}
+
+/**
+ * Implementation of hook_block().
+ */
+function node_weight_block($op = 'list', $delta = 0, $edit = array()) { 
+  if ($op == 'list') {
+    if ($allow_type = variable_get('node_weight_allow_type', NULL)) {
+      foreach ($allow_type as $type => $value) {
+        if ($value) {
+          $blocks[$type]['info'] = t('Node Weight: !type', array('!type' => ucfirst($type)));
+        }
+      }
+      return $blocks;
+    }
+  }
+  elseif ($op == 'configure') {
+    $types = array();
+    $display_list = array(0 => t('None'));
+    foreach (module_implements('weight_info') as $name) {
+      $function = $name .'_weight_info';
+      $return = $function();
+      if (isset($return) && is_array($return)) {
+        foreach ($return['form'] as $key => $_form) {
+          $return['form'][$key]['#default_value'] = variable_get('nw_'. $key .'_'. $delta, $return['form'][$key]['#default_value']);
+        }
+        $form['node_weight_'. $name .'_fs'] = $return['form'];
+        $form['node_weight_'. $name .'_fs']['#type'] = 'fieldset';
+        $form['node_weight_'. $name .'_fs']['#title'] = $return['name'] .' settings';
+        $form['node_weight_'. $name .'_fs']['#collapsible'] = TRUE;
+        $form['node_weight_'. $name .'_fs']['#collapsed'] = variable_get('nw_display_style_'. $delta, '') == $name ? FALSE : TRUE;
+        $display_list[$name] = $return['name'] .' - '. $return['description'];
+        $types[] = $name;
+      }
+    }
+    $form['display_style'] = array(
+      '#type' => 'select',
+      '#title' => t('Display style'),
+      '#default_value' => variable_get('nw_display_style_'. $delta, 0),
+      '#options' => $display_list,
+      '#weight' => -10,
+    );
+    $form['general_fs'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('General settings'),
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+      '#weight' => -9,
+    );
+    $form['general_fs']['number_of_item'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Number of items'),
+      '#description' => t('Number of items to display.'),
+      '#default_value' => variable_get('nw_number_of_item_'. $delta, 5),
+      '#size' => 5,
+    );
+    if (module_exists('imagecache')) {
+      $presets = array('none' => t('Do not use imagecacahe'));
+      foreach (imagecache_presets() as $preset) {
+        $presets[$preset['presetname']] = $preset['presetname'];
+      }
+      $form['general_fs']['preset_image'] = array(
+        '#type' => 'select',
+        '#title' => t('Preset image'),
+        '#description' => t('Select imagecache preset for image.'),
+        '#default_value' => variable_get('nw_preset_image_'. $delta, 'none'),
+        '#options' => $presets,
+      );
+    }
+    $form['general_fs']['display_image_as_link'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Display image as link'),
+      '#default_value' => variable_get('nw_display_image_as_link_'. $delta, TRUE),
+    );
+    $form['general_fs']['display_title'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Display title'),
+      '#description' => t('Display node title'),
+      '#default_value' => variable_get('nw_display_title_'. $delta, FALSE),
+    );
+    $form['general_fs']['display_body'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Display body'),
+      '#description' => t('Display node body'),
+      '#default_value' => variable_get('nw_display_body_'. $delta, FALSE),
+    );
+    $form['general_fs']['footer'] = array(
+      '#type' => 'textarea',
+      '#title' => t('Footer'),
+      '#description' => t('Display message after node body. Leave blank if do not want to display.'),
+      '#default_value' => variable_get('nw_footer_'. $delta, ''),
+    );
+    
+    // Javascript
+    $nw_settings['node_weight'] = array(
+      'types' => $types,
+    );
+    drupal_add_js(drupal_get_path('module', 'node_weight') .'/node_weight.js');
+    drupal_add_js($nw_settings, 'setting');
+    
+    return $form;
+  }
+  elseif ($op == 'save') {
+    variable_set('nw_display_style_'. $delta, $edit['display_style']);
+    variable_set('nw_number_of_item_'. $delta, $edit['number_of_item']);
+    variable_set('nw_display_title_'. $delta, $edit['display_title']);
+    variable_set('nw_display_body_'. $delta, $edit['display_body']);
+    variable_set('nw_footer_'. $delta, $edit['footer']);
+    variable_set('nw_display_image_as_link_'. $delta, $edit['display_image_as_link']);
+    if (module_exists('imagecache')) {
+      variable_set('nw_preset_image_'. $delta, $edit['preset_image']);
+    }
+    
+    // Save settings from implements module
+    foreach (module_implements('weight_info') as $name) {
+      $function = $name .'_weight_info';
+      $return = $function();
+      if (isset($return) && is_array($return)) {
+        if (!empty($return['form'])) {
+          foreach ($return['form'] as $key => $form) {
+            if (array_key_exists($key, $edit)) {
+              variable_set('nw_'. $key .'_'. $delta, $edit[$key]);
+            }
+          }
+        }
+      }
+    }
+  }
+  elseif ($op == 'view') {
+    $settings = array(
+      'number_of_item' => variable_get('nw_number_of_item_'. $delta, 5),
+      'style' => variable_get('nw_display_style_'. $delta, 0),
+      'display_title' => variable_get('nw_display_title_'. $delta, FALSE),
+      'display_body' => variable_get('nw_display_body_'. $delta, FALSE),
+      'footer' => variable_get('nw_footer_'. $delta, ''),
+      'display_image_as_link' => variable_get('nw_display_image_as_link_'. $delta, TRUE),
+    );
+    if (module_exists('imagecache')) {
+      $preset_image = variable_get('nw_preset_image_'. $delta, 'none');
+      if ($preset_image != 'none' && $preset_image != '') {
+        $settings['preset_image'] = $preset_image;
+      }
+    }
+    
+    $limit = $settings['number_of_item'] > 0 ? 'LIMIT 0, '. $settings['number_of_item'] : '';
+    
+    // Multi-language support
+    if (module_exists('locale')) {
+      global $language;
+      $weight = db_query("SELECT n.nid, nw.url FROM {node} n LEFT JOIN {node_weight} nw ON n.nid = nw.nid WHERE n.type = '%s' AND n.status = 1 AND (n.language = '' OR n.language = '%s') ORDER BY nw.weight %s", $delta, $language->language, $limit);
+    }
+    else {
+      $weight = db_query("SELECT n.nid, nw.url FROM {node} n LEFT JOIN {node_weight} nw ON n.nid = nw.nid WHERE n.type = '%s' AND n.status = 1 ORDER BY nw.weight %s", $delta, $limit);
+    }
+    
+    // List nodes
+    $nodes = array();
+    while ($_node = db_fetch_object($weight)) {
+      $style = variable_get('nw_display_style_'.$delta, FALSE);
+      $function = $style .'_weight_info';
+      if (function_exists($function)) {
+        $return = $function();
+        foreach ($return['form'] as $key => $form) {
+          $settings[$key] = variable_get('nw_'. $key .'_'. $delta, NULL);
+        }
+      }
+      
+      $node = node_load($_node->nid);
+      $node->url = $_node->url;
+      
+      // Multi-language URL
+      if (!empty($node->language)) {
+        if (mb_substr($node->url, 0, 7) != 'http://') {
+          $node->url = $node->language .'/'. drupal_get_path_alias($node->url);
+        }
+      }
+      
+      if (mb_substr($node->url, 0, 7) != 'http://') {
+        $node->link = l($node->title, $node->url);
+      }
+      else {
+        $node->link = l($node->title, $node->url, array('absolute' => TRUE, 'attributes' => array('target' => '_blank')));
+      }
+      
+      $node->node_weight = array(
+        'image_path' => $node->{'field_'. $node->type .'_image'}[0]['filepath'],
+        'thumb_path' => $node->{'field_'. $node->type .'_thumb'}[0]['filepath'],
+        'swf_path' => $node->{'field_'. $node->type .'_swf'}[0]['filepath'],
+        'embed_path' => $node->{'field_'. $node->type .'_embed'}[0]['value'],
+      );
+      $nodes[] = $node;
+    }
+				
+    if ($style = variable_get('nw_display_style_'.$delta, FALSE)) {
+      $function = $style .'_weight_view';
+      if (function_exists($function)) {
+        $block['content'] = $function($nodes, $delta, $settings);
+      }
+    }
+    if (empty($block['content'])) {
+      $block['content'] = 'default';
+    }
+    
+    return $block;
+  }
+}
+
+/**
+ * Return settings
+ */
+function node_weight_get_settings($name, $type) {
+  return variable_get('nw_'. $name .'_'. $type, NULL);
+}
+
+/**
+ * Theme the node weight overview form.
+ *
+ * Arranges nodes in a table, and adds the css and js for draggable sorting.
+ *
+ * @ingroup themeable
+ * @ingroup forms
+ * @see node_weight_overview_form()
+ */
+function theme_node_weight_overview_form($form) {
+  // Each node has a 'weight' that can be used to arrange it in relation to
+  // other nodes. Drupal's tabledrag.js library allows users to control these
+  // weights by dragging and dropping the nodes in a list -- we just need to
+  // add identifying CSS classes to key elements in the table.
+
+  $rows = array();
+  foreach (element_children($form['node_weight']) as $key) {
+    $row = array();
+
+    // Render the hidden 'node_weight id' field and the title of the node into the
+    // same column of the row.
+    $row[] = drupal_render($form['node_weight'][$key]['nid']) . drupal_render($form['node_weight'][$key]['title']);
+	$row[] = drupal_render($form['node_weight'][$key]['nid']) . drupal_render($form['node_weight'][$key]['taxonomy']);
+
+    // Add an identifying CSS class to our weight field, as it's the one
+    // the tabledrag.js will be controlling. This can be anything we want it to
+    // be, we'll just tell the tabledrag.js library what it should look for.
+    $form['node_weight'][$key]['weight']['#attributes']['class'] = 'node-weight-weight';
+    $row[] = drupal_render($form['node_weight'][$key]['weight']);
+
+    // Render the edit and delete links
+    $row[] = drupal_render($form['node_weight'][$key]['edit']);
+	$row[] = drupal_render($form['node_weight'][$key]['delete']);
+
+    // Add the new row to our collection of rows, and give it the 'draggable'
+    // class, indicating that it should be... well, draggable.
+    $rows[] = array(
+      'data' => $row,
+      'class' => 'draggable',
+    );
+  }
+
+  // If there were no nodes found, note the fact so users don't get confused
+  // by a completely empty table.
+  if (count($rows) == 0) {
+    $rows[] = array(t('No nodes have been added.'), '<span class="node-weight-weight"></span>', '');
+  }
+
+  // Render a list of header titles, and our array of rows, into a table. Even
+  // we've already rendered all of our node, we always call drupal_render()
+  // on the form itself after we're done, so hidden security fields and other
+  // elements (like buttons) will appear properly at the bottom of the form.
+  $output = drupal_render($form['create_new']);
+  $header = array(t('Title'), t('Taxonomy'), t('Weight'), t('Edit'), t('Delete'));
+  $output .= theme('table', $header, $rows, array('id' => 'node-weight-overview'));
+  $output .= drupal_render($form);
+
+  // Now that we've built our output, tell Drupal to add the tabledrag.js library.
+  // We'll pass in the ID of the table, the behavior we want it to use, and the
+  // class that appears on each 'weight' form element it should be controlling.
+  drupal_add_tabledrag('node-weight-overview', 'order', 'self', 'node-weight-weight');
+
+  return $output;
+}
+
+function d($msg) {
+  drupal_set_message($msg);
+}
+
+function da($msg) {
+  drupal_set_message('<pre>'. print_r($msg, 1) .'</pre>');
+}

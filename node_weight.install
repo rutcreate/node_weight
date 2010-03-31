@@ -1,0 +1,43 @@
+<?php
+//$Id: node_weight.install,v 2.0 20010/03/30 crosalot Exp $
+
+/**
+ * @file
+ * Node Weight install schema for installing the node_weight module
+ *
+ */
+
+/**
+ * Implementation of hook_install()
+ */
+function node_weight_install() {
+  // Create Tables
+  drupal_install_schema('node_weight');
+}
+
+/**
+* Implementation of hook_schema().
+*/
+function node_weight_schema() {
+  /**
+   * Connect all the node_weight specific properties to the correct version of a node_weight.
+   */
+	$schema['node_weight'] = array(
+		'fields' => array(
+			'nid' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE),
+			'weight' => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+			'url' => array('type' => 'varchar', 'length' => 255),
+		),
+		'primary key' => array('nid'),
+	);
+    return $schema;
+}
+
+/**
+ * Implementation of hook_uninstall()
+ */
+function node_weight_uninstall() {
+	drupal_uninstall_schema('node_weight');
+	variable_del('node_weight');
+	variable_del('node_weight_allow_type');
+}

@@ -1,0 +1,158 @@
+<?php
+
+/**
+ * Implementation of hook_weight_info().
+ */
+function node_weight_cycle_weight_info() {
+  $form['cycle_navigation'] = array(
+    '#type' => 'select',
+    '#title' => t('Navigation\' position'),
+    '#default_value' => variable_get('cycle_navigation', 'top'),
+    '#options' => array(
+      'none' => t('Do not display'),
+      'top' => t('Top'),
+      'bottom' => t('Bottom'),
+    ),
+  );
+  $form['cycle_effect_speed'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Fade speed'),
+    '#description' => t('Speed in millisecond.'),
+    '#default_value' => variable_get('cycle_effect_speed', 3000),
+    '#size' => 5,
+  );
+  $form['cycle_effect_timeout'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Fade timeout'),
+    '#description' => t('Speed in millisecond.'),
+    '#default_value' => variable_get('cycle_effect_timeout', 6000),
+    '#size' => 5,
+  );
+  
+  return array(
+    'name' => t('Cycle'),
+    'description' => t('Fade display'),
+    'form' => $form,
+  );
+}
+
+/**
+ * Implementation of hook_weight_view().
+ */
+function node_weight_cycle_weight_view($nodes, $type, $settings) {
+  // Settings
+  foreach ($settings as $name => $value) {
+    $$name = $value;
+  }
+  
+  // Generate items
+  $items = array();
+  foreach ($nodes as $i => $node) {
+    foreach ($node->node_weight as $name => $value) {
+      $$name = $value;
+    }
+    
+    $hide = ($i > 0) ? 'none' : 'block';
+    
+    $item = '<div id="tab-'. $node->nid .'" class="node-weight-page" style="display:'. $hide .';">';
+    if ($embed) {
+      $item .= '<div class="node-weight-'. $type .'-image">'. $embed .'</div>';
+    }
+    elseif ($image_path) {
+      // Make image
+      if ($preset_image) {
+        $image = theme('imagecache', $preset_image, $image_path, $node->title, $node->title);
+      }
+      else {
+        $image = theme('image', $image_path, $node->title, $node->title);
+      }
+      // Image as link
+      if ($display_image_as_link) {
+        $options = array('html' => TRUE);
+        if (mb_substr($node->url, 0, 7) == 'http://') {
+          $options['absolute'] = TRUE;
+          $options['attributes'] = array('target' => '_blank');
+        }
+        $image = l($image, $node->url, $options);
+      }
+      $item .= '<div class="node-weight-'. $type .'-image">'. $image .'</div>';
+    }
+    elseif ($swf_path && module_exists('swftools')) {
+      /*$size = explode('x', variable_get('node_weight_swf_size_'.$delta, '210x150'));
+      $swf_height = $size[1];
+      $swf_width = $size[0];
+      $items .= '<div class="node-weight-'.$delta.'-swf">';
+      $items .= swf($swf_path, array('params' => array('height' => $swf_height, 'width' => $swf_width)));
+      $items .= '</div>';*/
+    }
+    
+    // Display title
+    if ($display_title) {
+      $item .= '<div class="node-weight-'. $type .'-title">';
+      $item .= $node->link;
+      $item .= '</div>';
+    }
+    
+    // Display body
+    if (!empty($display_body) && $node->body) {
+      $item .= '<div class="node-weight-'. $type .'-body">';
+      $item .= check_markup($node->body, $node->format, FALSE);
+      $item .= $footer;
+      $item .= '</div>';
+    }
+    
+    $item .= '</div>';
+    
+    // Store item
+    $items[] = $item;
+  }
+  
+  // HTML items
+  $items = implode('', $items);
+  
+  // Wrap items
+  $output = '<div class="node-weight-slide-content-cycle" id="marker-node-weight-navi-'.$type.'">'. $items .'</div>';
+  
+  // Navigation
+  $navi = '<div class="node-weight-slide-pager">';
+  $navi .= '<ul id="node-weight-navi-'. $type .'" class="node-weight-navi node-weight-navi-cycle">';
+  $navi .= '</ul>';
+  $navi .= '</div>';
+  if ($cycle_navigation == 'top') {
+    $output = $navi . $output;
+  }
+  elseif ($cycle_navigation == 'bottom') {
+    $output = $output . $navi;
+  }
+  
+  // Wrap outest
+  $output = '<div class="node-weight-slide node-weight-slide-cycle">'. $output .'</div>';
+  
+  // Edit order link
+  if (user_access('administer node weight')) {
+		$output .= '<div class="node-weight-edit-link">'. l(t('Change featured order...'), 'node_weight/'. $type) .'</div>';
+	}
+	
+	// Javascript
+	$cycle_settings['node_weight']['cycle'] = array(
+	  'speed' => $cycle_effect_speed ? $cycle_effect_speed : 3000,
+	  'timeout' => $cycle_effect_timeout ? $cycle_effect_timeout : 6000,
+	);
+  drupal_add_js($cycle_settings, 'setting');
+  drupal_add_js(drupal_get_path('module', 'node_weight_cycle') .'/node_weight.cycle.js');
+  drupal_add_js(drupal_get_path('module', 'node_weight_cycle') .'/node_weight.cycle_build.js');
+  
+  return $output;
+}
+
+/**
+ * Implementations of hook_theme().
+ */
+function node_weight_cycle_theme() {
+  return array(
+    'node_weight_cycle' => array(
+      'template' => 'node-weight-cycle',
+      'arguments' => array(),
+    ),
+  );
+}

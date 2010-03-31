@@ -1,0 +1,6 @@
+; $Id $
+name = Node weight
+description = Add weight to node with node weight manager.
+core = 6.x
+version = 6.x-2.0
+package = Node weight

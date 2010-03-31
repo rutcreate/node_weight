@@ -1,0 +1,8 @@
+; $Id$
+name = Node weight scrollable
+description = Node weight slide scrollable
+core = 6.x
+version = 6.x-1.0
+package = Node weight
+
+dependencies[] = node_weight
