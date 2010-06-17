@@ -7,8 +7,8 @@ div.node-weight-slide-content-scrollable {
   /* required settings */ 
   position:relative; 
   overflow:hidden; 
-  width: 600px; 
-  height:140px; 
+  width: 600px; /* fixed slide width */
+  height:140px; /* fixed slide height */
 } 
  
 /**
@@ -30,7 +30,7 @@ div.node-weight-slide-content-scrollable div.items {
  */ 
 div.node-weight-slide-content-scrollable div.items div { 
   float:left; 
-  width: 300px;
+  width: 300px; /* same width above */
 } 
  
 /* you may want to setup some decorations to active the item */ 

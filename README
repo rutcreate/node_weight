@@ -1,0 +1,10 @@
+How to use
+==========
+1. Copy node_weight to site/<your site>/modules/
+2. Enable modules at admin/build/modules
+3. Enable content type for node_weight at admin/settings/node_weight
+4. The content type in 3. must have cck filefield widget type Image and cck name must be field_<content type name>_image
+   ex. if content type name is 'slideshow', the cck name will be field_slideshow_image
+5. Add content as you wish.
+6. Configure block 'Node Weight: <content type name>'. Choose your display style.
+7. Enable block name Node Weight: <content type name>
