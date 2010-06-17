@@ -4,21 +4,22 @@
  * Implementation of hook_weight_info().
  */
 function node_weight_scrollable_weight_info() {
+  $options = array(
+    'none' => t('Do not display'),
+    'top' => t('Top'),
+    'bottom' => t('Bottom'),
+    'lr' => t('Left and right'),
+  );
+  if (module_exists('imagecache')) {
+    foreach (imagecache_presets() as $preset) {
+      $options[$preset['presetname']] = 'Thumbnail: '. $preset['presetname'];
+    }
+  }
   $form['scrollable_navigation'] = array(
     '#type' => 'select',
     '#title' => t('Navigation\' position'),
     '#default_value' => variable_get('scrollable_navigation', 'top'),
-    '#options' => array(
-      'none' => t('Do not display'),
-      'top' => t('Top'),
-      'bottom' => t('Bottom'),
-      'lr' => t('Left and right'),
-    ),
-  );
-  $form['scrollable_auto_scroll'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Auto scroll'),
-    '#default_value' => variable_get('scrollable_auto_scroll', TRUE),
+    '#options' => $options,
   );
   $form['scrollable_loop'] = array(
     '#type' => 'checkbox',
@@ -34,7 +35,7 @@ function node_weight_scrollable_weight_info() {
   $form['scrollable_scroll_interval'] = array(
     '#type' => 'textfield',
     '#title' => t('Scroll interval'),
-    '#description' => t('Speed in millisecond.'),
+    '#description' => t('Speed in millisecond. Enter \'no\' if you do not want to auto-scroll.'),
     '#default_value' => variable_get('scrollable_scroll_interval', 3000),
     '#size' => 5,
   );
@@ -115,6 +116,11 @@ function node_weight_scrollable_weight_view($nodes, $type, $settings) {
     
     $scrollable_settings['node_weight']['scrollable']['items'][] = url($image_path, array('absolute' => TRUE));
     
+    // If select thumbnail navigation.
+    if ($scrollable_navigation != 'top' || $scrollable_navigation != 'bottom' || $scrollable_navigation != 'lr') {
+      $navigation[] = theme('imagecache', $scrollable_navigation, $image_path, $node->title, $node->title);
+    }
+    
     // Store item
     $items[] = $item;
   }
@@ -135,6 +141,9 @@ function node_weight_scrollable_weight_view($nodes, $type, $settings) {
   elseif ($scrollable_navigation == 'bottom') {
     $output = $output . '<a class="prev">'. t('Previous') .'</a> <a class="next">'. t('Next') .'</a>';
   }
+  else {
+    $output = $output . '<div class="navi">'. implode("\n", $navigation) .'</div>';
+  }
   
   // Wrap outest
   $output = '<div class="node-weight-slide node-weight-slide-scrollable">'. $output .'</div>';
@@ -147,7 +156,6 @@ function node_weight_scrollable_weight_view($nodes, $type, $settings) {
 	// Javascript
 	$scrollable_settings['node_weight']['scrollable'] = array(
 	  'interval' => $scrollable_scroll_interval ? $scrollable_scroll_interval : 3000,
-	  'auto' => isset($scrollable_auto_scroll) ? $scrollable_auto_scroll : TRUE,
 	  'loop' => isset($scrollable_loop) ? $scrollable_loop : TRUE,
 	  'size' => isset($scrollable_size) ? $scrollable_size : 1,
 	  'linked' => isset($display_image_as_link) ? $display_image_as_link : TRUE,

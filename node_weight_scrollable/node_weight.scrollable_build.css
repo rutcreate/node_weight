@@ -38,3 +38,9 @@ div.node-weight-slide-content-scrollable div.items div.active {
   border:1px inset #ccc; 
   background-color:#fff; 
 }
+
+div.navi {
+  float: left;
+}
+
+div.navi .active { } 
